@@ -8,9 +8,32 @@ from deepgram import (
     LiveTranscriptionEvents,
     LiveOptions,
 )
+from websockets.server import serve
+import asyncio
+import json
 
 # Load environment variables
 load_dotenv()
+
+# Global WebSocket clients set
+websocket_clients = set()
+
+# WebSocket handler
+async def handle_client(websocket):
+    websocket_clients.add(websocket)
+    try:
+        async for message in websocket:
+            pass  # We don't expect messages from the client
+    finally:
+        websocket_clients.remove(websocket)
+
+# Function to broadcast transcription to all connected clients
+async def broadcast_transcription(text):
+    if websocket_clients:  # Only attempt to broadcast if there are connected clients
+        message = json.dumps({"transcription": text})
+        await asyncio.gather(
+            *[client.send(message) for client in websocket_clients]
+        )
 
 # Step 1: Download and parse the PLS file to get the stream URL
 def get_stream_url(pls_url):
@@ -23,8 +46,27 @@ def get_stream_url(pls_url):
             return line.split("=", 1)[1].strip()
     raise Exception("No stream URL found in PLS file")
 
-def main():
+# Define the transcription callback outside of main
+def on_message(self, result, **kwargs):
+    sentence = result.channel.alternatives[0].transcript
+    if not sentence:
+        return
+    print(f"ATC: {sentence}")
+    # Create a new event loop for this thread if it doesn't exist
     try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(broadcast_transcription(sentence))
+        loop.close()
+    except Exception as e:
+        print(f"Error broadcasting transcription: {e}")
+
+async def main():
+    try:
+        # Start WebSocket server
+        websocket_server = await serve(handle_client, "localhost", 8765)
+        print("WebSocket server started on ws://localhost:8765")
+
         # Initialize Deepgram client with API key
         api_key = os.getenv('DEEPGRAM_API_KEY')
         if not api_key:
@@ -34,18 +76,11 @@ def main():
         # Create a websocket connection to Deepgram
         dg_connection = deepgram.listen.websocket.v("1")
 
-        # Define the transcription callback
-        def on_message(self, result, **kwargs):
-            sentence = result.channel.alternatives[0].transcript
-            if not sentence:
-                return
-            print(f"ATC: {sentence}")
-
         # Set up the message handler
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
 
         # Get the stream URL from PLS file
-        pls_url = "https://www.liveatc.net/play/ksfo_gnd.pls"
+        pls_url = "https://www.liveatc.net/play/klax_gnd.pls"
         print("Fetching stream URL...")
         stream_url = get_stream_url(pls_url)
         print("Streaming from:", stream_url)
@@ -110,7 +145,7 @@ def main():
         stream_worker.start()
 
         # Wait for user input to stop transcription
-        input("Press Enter to stop transcription...\n")
+        await asyncio.get_event_loop().run_in_executor(None, input, "Press Enter to stop transcription...\n")
 
         # Signal the streaming thread to exit
         lock_exit.acquire()
@@ -119,12 +154,14 @@ def main():
 
         stream_worker.join()
 
-        # Close the Deepgram connection
+        # Close the Deepgram connection and WebSocket server
         dg_connection.finish()
+        websocket_server.close()
+        await websocket_server.wait_closed()
         print("Transcription stopped")
 
     except Exception as e:
         print(f"An error occurred: {e}")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

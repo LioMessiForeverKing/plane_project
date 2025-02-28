@@ -80,37 +80,27 @@
                     return;
                 }
                 fetchAircraftData();
-            }, 2000); // Update every 2 seconds
+            }, 5000); // Update every 5 seconds
         }
 
-        // Initial start of updates
-        startUpdates();
-
-        // Function to update aircraft markers on the map
+        // Function to update aircraft markers
         function updateAircraftMarkers(data) {
             // Clear existing markers
             aircraftMarkers.forEach(marker => marker.remove());
             aircraftMarkers = [];
 
-            // Add new markers for each aircraft
-            if (data.ac && Array.isArray(data.ac)) {
+            // Add new markers
+            if (data && data.ac) {
                 data.ac.forEach(aircraft => {
                     if (aircraft.lat && aircraft.lon) {
-                        // Create a custom airplane icon
-                        const planeIcon = L.divIcon({
-                            html: `<svg width="20" height="20" viewBox="0 0 24 24" style="transform: rotate(${aircraft.track || 0}deg)">
-                                <path fill="#2196F3" d="M21,16V14L13,9V3.5A1.5,1.5,0,0,0,11.5,2A1.5,1.5,0,0,0,10,3.5V9L2,14V16L10,13.5V19L8,20.5V22L11.5,21L15,22V20.5L13,19V13.5L21,16Z"/>
-                            </svg>`,
-                            className: 'airplane-icon',
-                            iconSize: [20, 20],
-                            iconAnchor: [10, 10]
-                        });
-
                         const marker = L.marker([aircraft.lat, aircraft.lon], {
-                            icon: planeIcon
+                            icon: L.divIcon({
+                                html: '✈️',
+                                className: 'aircraft-icon',
+                                iconSize: [20, 20]
+                            })
                         }).addTo(map);
 
-                        // Create popup content with aircraft details
                         const popupContent = `
                             <strong>Flight:</strong> ${aircraft.flight || 'N/A'}<br>
                             <strong>Aircraft:</strong> ${aircraft.t || 'N/A'}<br>
@@ -127,13 +117,34 @@
             }
         }
 
-        // Function to update transcription text (to be connected with Python backend)
-        function updateTranscription(text) {
-            document.getElementById('transcription-text').innerText = text;
-        }
+        // WebSocket connection for real-time transcription
+        const ws = new WebSocket('ws://localhost:8765');
+
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.transcription) {
+                document.getElementById('transcription-text').innerText = data.transcription;
+            }
+        };
+
+        ws.onopen = function() {
+            console.log('WebSocket connection established');
+            document.getElementById('transcription-text').innerText = 'Connected to ATC feed...';
+        };
+
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            document.getElementById('transcription-text').innerText = 'Error connecting to ATC feed';
+        };
+
+        ws.onclose = function() {
+            console.log('WebSocket connection closed');
+            document.getElementById('transcription-text').innerText = 'ATC feed disconnected';
+        };
 
         // Initial fetch of aircraft data
         fetchAircraftData();
+        startUpdates();
     </script>
 </body>
 </html>
