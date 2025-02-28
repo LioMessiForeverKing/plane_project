@@ -55,7 +55,7 @@
             };
 
             try {
-                const response = await fetch(`https://adsbexchange-com1.p.rapidapi.com/v2/lat/37.6213/lon/-122.3790/dist/1/`, options);
+                const response = await fetch(`https://adsbexchange-com1.p.rapidapi.com/v2/lat/37.6213/lon/-122.3790/dist/2/`, options);
                 const data = await response.json();
                 updateAircraftMarkers(data);
             } catch (error) {
