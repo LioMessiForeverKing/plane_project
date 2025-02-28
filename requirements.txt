@@ -6,6 +6,18 @@ python-dotenv==1.0.0
 PyAudio==0.2.13
 httpx==0.25.2
 
-# brew install python 3.11
-# pip3 install -r requirements.txt
-# python3 atc_transcriber.py
+# installation steps
+#brew install portaudio
+#pip3 install -r requirements.txt --no-cache-dir
+#pip3 install requests==2.31.0 SpeechRecognition==3.10.0
+
+#pip3 install --global-option=build_ext --global-option=-I/opt/homebrew/include --global-option=-L/opt/homebrew/lib PyAudio==0.2.13
+#pip3 install --only-binary :all: PyAudio==0.2.13
+
+#brew install python-pyaudio
+#pip3 install PyAudio==0.2.11
+#pip3 install --global-option=build_ext --global-option=-I/opt/homebrew/Cellar/portaudio/19.7.0/include --global-option=-L/opt/homebrew/Cellar/portaudio/19.7.0/lib PyAudio
+
+#brew install ffmpeg
+
+#brew install python@3.11
