@@ -65,6 +65,26 @@
 
         // Store aircraft markers
         let aircraftMarkers = [];
+        let updateInterval;
+        let startTime;
+
+        // Function to start the updates
+        function startUpdates() {
+            startTime = Date.now();
+            fetchAircraftData(); // Initial fetch
+            updateInterval = setInterval(() => {
+                const elapsedTime = Date.now() - startTime;
+                if (elapsedTime >= 30000) { // 30 seconds
+                    clearInterval(updateInterval);
+                    console.log('Updates stopped after 30 seconds');
+                    return;
+                }
+                fetchAircraftData();
+            }, 2000); // Update every 2 seconds
+        }
+
+        // Initial start of updates
+        startUpdates();
 
         // Function to update aircraft markers on the map
         function updateAircraftMarkers(data) {
