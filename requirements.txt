@@ -1,7 +1,14 @@
+
+
 requests==2.31.0
 SpeechRecognition==3.10.0
 PyAudio==0.2.13
 
-# brew install python 3.11
-# pip3 install -r requirements.txt
-# python3 atc_transcriber.py
+# brew install portaudio
+# pip3 install pyaudio==0.2.11
+# pip3 install --global-option=build_ext --global-option=-I/opt/homebrew/Cellar/portaudio/19.7.0/include --global-option=-L/opt/homebrew/Cellar/portaudio/19.7.0/lib PyAudio
+# brew install python@3.11
+# brew install python@3.11
+# pip3.11 install -r requirement.txt
+# python3.11 atc_transcriber.py
+
