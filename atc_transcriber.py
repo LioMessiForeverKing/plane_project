@@ -1,8 +1,16 @@
 import requests
+import threading
 import subprocess
-import io
-import wave
-import speech_recognition as sr
+import os
+from dotenv import load_dotenv
+from deepgram import (
+    DeepgramClient,
+    LiveTranscriptionEvents,
+    LiveOptions,
+)
+
+# Load environment variables
+load_dotenv()
 
 # Step 1: Download and parse the PLS file to get the stream URL
 def get_stream_url(pls_url):
@@ -17,67 +25,106 @@ def get_stream_url(pls_url):
 
 def main():
     try:
+        # Initialize Deepgram client with API key
+        api_key = os.getenv('DEEPGRAM_API_KEY')
+        if not api_key:
+            raise Exception("DEEPGRAM_API_KEY not found in environment variables")
+        deepgram = DeepgramClient(api_key)
+        
+        # Create a websocket connection to Deepgram
+        dg_connection = deepgram.listen.websocket.v("1")
+
+        # Define the transcription callback
+        def on_message(self, result, **kwargs):
+            sentence = result.channel.alternatives[0].transcript
+            if not sentence:
+                return
+            print(f"ATC: {sentence}")
+
+        # Set up the message handler
+        dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
+
+        # Get the stream URL from PLS file
         pls_url = "https://www.liveatc.net/play/ksfo_gnd.pls"
         print("Fetching stream URL...")
         stream_url = get_stream_url(pls_url)
         print("Streaming from:", stream_url)
 
-        # Step 2: Start FFmpeg to capture the audio stream
+        # Configure Deepgram options for linear16 PCM audio
+        options = LiveOptions(
+            model="nova-2-atc",
+            smart_format=True,
+            language="en",
+            encoding="linear16",
+            channels=1,
+            sample_rate=16000
+        )
+
+        print("\nStarting transcription... Press Enter to stop.\n")
+        
+        # Start the Deepgram connection
+        if not dg_connection.start(options):
+            print("Failed to start Deepgram connection")
+            return
+
+        # Set up thread control for a clean shutdown
+        lock_exit = threading.Lock()
+        exit_flag = False
+
+        # Launch FFmpeg to convert the MP3 stream to linear16 PCM audio
         ffmpeg_command = [
             "ffmpeg",
             "-i", stream_url,
-            "-f", "s16le",           # output raw 16-bit PCM data
+            "-f", "s16le",            # output raw PCM data
             "-acodec", "pcm_s16le",
-            "-ar", "16000",          # set sample rate to 16000 Hz
-            "-ac", "1",              # mono audio
-            "-loglevel", "quiet",    # suppress extra output
-            "pipe:1"
+            "-ar", "16000",           # sample rate of 16kHz
+            "-ac", "1",               # mono audio
+            "-loglevel", "quiet",     # suppress FFmpeg output
+            "pipe:1"                  # pipe to stdout
         ]
+        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE)
 
-        process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE)
-
-        # Step 3: Set up the speech recognizer
-        recognizer = sr.Recognizer()
-        SAMPLE_RATE = 16000
-        CHUNK_DURATION = 10  # seconds
-        SAMPLES_PER_CHUNK = CHUNK_DURATION * SAMPLE_RATE
-        BYTES_PER_SAMPLE = 2  # 16-bit PCM -> 2 bytes per sample
-
-        print("Starting transcription...")
-        while True:
-            # Read enough bytes for one chunk of audio
-            raw_audio = process.stdout.read(SAMPLES_PER_CHUNK * BYTES_PER_SAMPLE)
-            if not raw_audio:
-                break  # stream ended
-
-            # Wrap the raw audio in a WAV container in memory
-            audio_stream = io.BytesIO()
-            with wave.open(audio_stream, 'wb') as wf:
-                wf.setnchannels(1)
-                wf.setsampwidth(BYTES_PER_SAMPLE)
-                wf.setframerate(SAMPLE_RATE)
-                wf.writeframes(raw_audio)
-            audio_stream.seek(0)
-
-            # Use SpeechRecognition to transcribe the audio chunk
-            with sr.AudioFile(audio_stream) as source:
-                audio_data = recognizer.record(source)
+        # Define the streaming thread that reads from FFmpeg and sends data to Deepgram
+        def stream_thread():
             try:
-                transcription = recognizer.recognize_google(audio_data)
-                print("Transcription:", transcription)
-            except sr.UnknownValueError:
-                print("Google Speech Recognition could not understand audio")
-            except sr.RequestError as e:
-                print("Could not request results from Google Speech Recognition service; {0}".format(e))
+                while True:
+                    lock_exit.acquire()
+                    if exit_flag:
+                        lock_exit.release()
+                        break
+                    lock_exit.release()
 
-    except KeyboardInterrupt:
-        print("\nStopping transcription...")
-        if 'process' in locals():
-            process.terminate()
+                    # Read a small chunk of data from FFmpeg's stdout
+                    data = ffmpeg_process.stdout.read(4096)
+                    if not data:
+                        break
+                    # Send the chunk of PCM data to Deepgram
+                    dg_connection.send(data)
+            except Exception as e:
+                print(f"Streaming error: {e}")
+            finally:
+                ffmpeg_process.terminate()
+
+        # Start the streaming thread
+        stream_worker = threading.Thread(target=stream_thread)
+        stream_worker.start()
+
+        # Wait for user input to stop transcription
+        input("Press Enter to stop transcription...\n")
+
+        # Signal the streaming thread to exit
+        lock_exit.acquire()
+        exit_flag = True
+        lock_exit.release()
+
+        stream_worker.join()
+
+        # Close the Deepgram connection
+        dg_connection.finish()
+        print("Transcription stopped")
+
     except Exception as e:
         print(f"An error occurred: {e}")
-        if 'process' in locals():
-            process.terminate()
 
 if __name__ == "__main__":
     main()
