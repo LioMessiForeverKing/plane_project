@@ -80,7 +80,7 @@ async def main():
         dg_connection.on(LiveTranscriptionEvents.Transcript, on_message)
 
         # Get the stream URL from PLS file
-        pls_url = "https://www.liveatc.net/play/klax_gnd.pls"
+        pls_url = "https://www.liveatc.net/play/ksfo_gnd.pls"
         print("Fetching stream URL...")
         stream_url = get_stream_url(pls_url)
         print("Streaming from:", stream_url)
