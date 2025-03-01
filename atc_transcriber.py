@@ -2,6 +2,8 @@ import requests
 import threading
 import subprocess
 import os
+import time
+from queue import Queue
 from dotenv import load_dotenv
 from deepgram import (
     DeepgramClient,
@@ -11,9 +13,17 @@ from deepgram import (
 from websockets.server import serve
 import asyncio
 import json
+import google.generativeai as genai
 
 # Load environment variables
 load_dotenv()
+
+# Initialize Gemini AI
+genai.configure(api_key="AIzaSyA_iyHWfwE4E0MzNCuQ4C0cIzFkdDJ8sc8")
+model = genai.GenerativeModel('gemini-2.0-flash')
+
+# Initialize message queue
+message_queue = Queue()
 
 # Global WebSocket clients set
 websocket_clients = set()
@@ -47,25 +57,41 @@ def get_stream_url(pls_url):
     raise Exception("No stream URL found in PLS file")
 
 # Define the transcription callback outside of main
+async def process_queue():
+    while True:
+        if not message_queue.empty():
+            raw_text = message_queue.get()
+            try:
+                # Process the text through Gemini AI
+                prompt = f"Format this ATC communication in a clear, readable way. your output should not be more than one line: {raw_text}"
+                response = model.generate_content(prompt)
+                formatted_text = response.text
+                print(f"Original ATC: {raw_text}")
+                print(f"Formatted ATC: {formatted_text}")
+                
+                # Broadcast the formatted text
+                await broadcast_transcription(formatted_text)
+            except Exception as e:
+                print(f"Error processing message through Gemini: {e}")
+                # Fallback to original text if Gemini processing fails
+                await broadcast_transcription(raw_text)
+        await asyncio.sleep(0.1)
+
 def on_message(self, result, **kwargs):
     sentence = result.channel.alternatives[0].transcript
     if not sentence:
         return
-    print(f"ATC: {sentence}")
-    # Create a new event loop for this thread if it doesn't exist
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(broadcast_transcription(sentence))
-        loop.close()
-    except Exception as e:
-        print(f"Error broadcasting transcription: {e}")
+    # Add the message to the queue instead of broadcasting directly
+    message_queue.put(sentence)
 
 async def main():
     try:
         # Start WebSocket server
         websocket_server = await serve(handle_client, "localhost", 8765)
         print("WebSocket server started on ws://localhost:8765")
+
+        # Start the queue processor
+        asyncio.create_task(process_queue())
 
         # Initialize Deepgram client with API key
         api_key = os.getenv('DEEPGRAM_API_KEY')
