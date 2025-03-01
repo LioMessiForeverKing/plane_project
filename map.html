@@ -10,14 +10,35 @@
         #map { height: 100vh; width: 100%; }
         #transcription {
             position: absolute;
-            bottom: 20px;
-            left: 20px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            max-width: 80%;
+            top: 20px;
+            right: 20px;
+            background: rgba(33, 33, 33, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            max-width: 400px;
+            width: 90%;
             z-index: 1000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #ffffff;
+            transition: all 0.3s ease;
+        }
+
+        #transcription h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            color: #ffffff;
+            opacity: 0.9;
+        }
+
+        #transcription-text {
+            font-size: 14px;
+            line-height: 1.5;
+            margin: 0;
+            opacity: 0.85;
         }
     </style>
 </head>
