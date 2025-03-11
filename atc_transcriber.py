@@ -10,7 +10,7 @@ from deepgram import (
     LiveTranscriptionEvents,
     LiveOptions,
 )
-from websockets.server import serve
+import websockets as serve
 import asyncio
 import json
 import google.generativeai as genai
